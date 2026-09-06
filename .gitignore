@@ -1,0 +1,19 @@
+# secrets — never commit
+.env
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# data + db
+data/chroma/
+*.db
+*.sqlite3
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
