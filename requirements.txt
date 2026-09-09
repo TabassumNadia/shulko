@@ -1,35 +1,65 @@
-# --- core ---
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
-pydantic-settings==2.7.0
-python-dotenv==1.0.1
+# Version floors, not exact pins.
+#
+# Exact pins from one library generation break on a newer Python: pip
+# resolves the whole file before installing anything, so a single
+# incompatible pin means nothing installs at all. Floors let pip pick a
+# set that works on your interpreter. The code imports defensively where
+# LangChain moved things between 0.3 and 1.x.
 
-# --- agents / LLM ---
-langchain==0.3.14
-langchain-core==0.3.29
-langchain-openai==0.2.14
-langchain-google-genai==2.0.8
-langgraph==0.2.62
-langsmith==0.2.10
+# --- API ---
+fastapi>=0.115
+uvicorn[standard]>=0.34
+python-multipart>=0.0.20
+pydantic>=2.10
+pydantic-settings>=2.7
+python-dotenv>=1.0
+
+# --- LangChain / agents / tracing ---
+langchain>=0.3.14
+langchain-core>=0.3.29
+langchain-community>=0.3.14
+langchain-google-genai>=2.0.8
+langchain-chroma>=0.2.0
+langgraph>=0.2.62
+langsmith>=0.2.10
 
 # --- retrieval ---
-chromadb==0.5.23
-rank-bm25==0.2.2
+chromadb>=0.5.23
+rank-bm25>=0.2.2
 
-# --- search ---
-tavily-python==0.5.0
+# --- grounding: Gemini native google_search tool ---
+google-genai>=1.2.0
+
+# --- search fallback ---
+tavily-python>=0.5.0
 
 # --- documents ---
-pdfplumber==0.11.4
-pillow==11.1.0
+# PyMuPDF reads PDFs with a text layer, which is most supplier invoices.
+# Images and scans go to the Gemini vision path in agents/extractor.py.
+pymupdf>=1.25
+# pdfplumber keeps the column geometry of the tariff schedule, which is
+# what backend/rag/ingest.py needs to tell a CD column from an SD one.
+# Only the ingest step imports it, but a clone cannot rebuild the index
+# without it, so it is a real dependency and not an optional extra.
+pdfplumber>=0.11
+
+# --- local embeddings (ONNX, no torch, no API quota) ---
+fastembed>=0.4
+pillow>=11.0
+
+# Local OCR for images and scanned PDFs with no text layer. This is the
+# lightweight ONNX OCR path in backend/tools/ocr_tool.py -- no Tesseract
+# binary, no PATH surgery, no torch. It now installs on Python 3.13, so
+# it is a listed dependency rather than the manual step it used to be.
+rapidocr-onnxruntime>=1.4
 
 # --- storage ---
-sqlmodel==0.0.22
+sqlmodel>=0.0.22
 
-# --- frontend ---
-streamlit==1.41.1
-pandas==2.2.3
+# --- front-end ---
+streamlit>=1.41
+requests>=2.32
+pandas>=2.2
 
 # --- dev ---
-pytest==8.3.4
+pytest>=8.3

@@ -51,6 +51,10 @@ class LineItemResult(BaseModel):
     candidates: list[HSCandidate] = Field(default_factory=list)
     chosen_hs_code: str | None = None
     duty: dict | None = None
+    # Statutory rates as percentages. A question with no invoice attached
+    # has no value to compute on, so the honest answer is the rate card,
+    # not a taka figure derived from a price of zero.
+    rates_pct: dict | None = None
     advisories: list[Advisory] = Field(default_factory=list)
     needs_review: bool = False
     warnings: list[str] = Field(default_factory=list)

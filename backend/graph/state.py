@@ -22,6 +22,7 @@ class ShulkoState(TypedDict, total=False):
     results: Annotated[list[dict], operator.add]
     advisories: list[dict]
     needs_review: bool
+    notional: bool           # true when no invoice value was supplied
     warnings: Annotated[list[str], operator.add]
 
     # --- output ---
