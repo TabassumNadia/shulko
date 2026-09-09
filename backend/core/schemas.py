@@ -37,6 +37,16 @@ class HSCandidate(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str = ""
     evidence: list[Evidence] = Field(default_factory=list)
+    # How many Section/Chapter Notes for THIS candidate's own chapter were
+    # placed in front of the ranking model.
+    #
+    # Without this the Verifier cannot tell two very different situations
+    # apart, because both arrive as an empty `evidence` list:
+    #   0   the knowledge base holds no note for this chapter, so there
+    #       was nothing to quote and silence is honest;
+    #   > 0 the model was shown the governing law and did not quote it,
+    #       which is a real evidence gap and belongs in front of a human.
+    notes_available: int = 0
 
 
 class Advisory(BaseModel):

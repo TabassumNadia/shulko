@@ -145,6 +145,26 @@ uvicorn backend.main:app --reload
 streamlit run frontend/app.py
 ```
 
+**Editing `.env` requires a manual restart — `--reload` will not pick it
+up.** Settings are read once per process, and the reloader watches `*.py`;
+its default exclude list also contains `.*`, so a dotfile like `.env` is
+skipped even if you pass `--reload-include .env` (un-excluding dotfiles
+means watching `.venv` and `.git` too, which is worse than the problem).
+
+This matters because the failure is silent and looks like a bug elsewhere:
+`/health` keeps faithfully reporting the models *this process* loaded while
+`.env` on disk says something else, so a model switch appears to have been
+ignored. Stop the server with Ctrl-C and start it again. The backend prints
+its effective configuration on startup, so the two can be compared at a
+glance:
+
+```
+[shulko] models in effect -- chat=gemini-3.5-flash vision=gemini-3.5-flash
+         judge=gemini-3.5-flash-lite grounding=gemini-3.5-flash
+[shulko] tracing=on project=shulko -- edit .env then RESTART for changes
+         to apply (uvicorn --reload does not watch .env)
+```
+
 Then open <http://localhost:8501>. Check <http://localhost:8000/health>
 first — it reports what is actually configured and indexed:
 
@@ -153,10 +173,16 @@ first — it reports what is actually configured and indexed:
   "status": "ok",
   "tariff_chapters_loaded": 96,
   "indexed": { "tariff_lines": 7154, "chapter_notes": 77 },
+  "notes_chapters": ["39", "61", "62", "84", "85", "87"],
   "retrieval_mode": "hybrid",
   "langsmith_tracing": true
 }
 ```
+
+`notes_chapters` is the list of chapters the legal re-ranking stage can
+actually cite from. An item outside it gets no note citation because none
+exists to cite — the output says so in those words, rather than reporting
+it the same way as a note that was available and went unquoted.
 
 `"retrieval_mode": "bm25_only"` means the vector store is missing or
 unreachable and retrieval has silently degraded to lexical search — run the
@@ -165,7 +191,7 @@ index step above.
 ### Verify
 
 ```bash
-pytest                       # 72 tests, no network, no API key needed
+pytest                       # 90 tests, no network, no API key needed
 python -m backend.core.llm   # lists the models your key can actually reach
 ```
 
@@ -217,11 +243,32 @@ VISION_MODEL=gemini-3.5-flash-lite
 using when its quota is available; `-lite` keeps the system demonstrable
 when it is not. Daily quotas reset at midnight US Pacific.
 
+**`JUDGE_MODEL` stays on `-lite` on purpose, and is not an oversight.** The
+Verifier's output schema is flat — three booleans and a list of sentences —
+which `-lite` fills reliably, and its job is to check a decision rather
+than make one. Keeping it on a *different* id from `CHAT_MODEL` also gives
+it a separate quota bucket, since Google meters per model: the verifier
+cannot then eat the allowance the classifier is queueing for. Point it at
+`gemini-3.5-flash` if you prefer, at the cost of sharing one budget.
+
+**The classifier is the one role where the model choice is visible in the
+output.** `-lite` reliably fills flat schemas but frequently returns the
+nested `evidence` list empty, so classifications come back with no note
+quoted even though the notes were supplied to it. That is not a retrieval
+failure, and the Verifier now says which of the two it is — see
+[Limitations](#limitations).
+
 **Grounded search has a separate, smaller free-tier allowance** and is
 usually the first thing to run out. When it does, the run still completes
-and simply carries no advisories. Setting `TAVILY_API_KEY` (free, 1,000
-searches/month) gives the Regulatory agent a fallback that retrieves pages
-and answers strictly from them.
+and simply carries no advisories — and the UI now says the check could not
+run, instead of showing the same silence it would show for "searched, and
+nothing applies". The two mean opposite things to an importer.
+
+`TAVILY_API_KEY` is **empty in `.env` as shipped**, so there is currently no
+fallback: when the Gemini grounding quota is gone, the regulatory step is
+skipped for that run. Setting it (free, 1,000 searches/month) gives the
+Regulatory agent a fallback that retrieves pages and answers strictly from
+them.
 
 ---
 
@@ -389,6 +436,13 @@ names them.
   text and description alone — the legal re-ranking stage has nothing to
   apply. Extending it is a matter of running `ingest notes` over more
   chapter PDFs, not a code change.
+- **Note citation quality tracks the classifier model.** On
+  `gemini-3.5-flash` the ranking stage quotes the governing note verbatim.
+  On `gemini-3.5-flash-lite` it usually returns the citation list empty
+  even though the same notes were placed in front of it. The system does
+  not paper over this: when notes were available and none was cited the run
+  says so and is flagged for review, and when the chapter genuinely has no
+  note loaded it says that instead.
 - **SRO detection is search-based, not an authoritative feed.** It reports
   what it retrieved and refuses to state anything it did not; it cannot
   guarantee completeness.

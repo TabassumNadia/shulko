@@ -110,6 +110,16 @@ def rank_with_notes(item: LineItem, candidates: list[dict]) -> list[HSCandidate]
     chapters = sorted({c["chapter"] for c in candidates})
     notes = _load_notes(chapters)
 
+    # Count the notes per chapter, so each returned candidate can record
+    # whether the law governing ITS OWN chapter was in front of the model.
+    # A single total across all candidate chapters would credit a
+    # chapter-52 candidate with chapter-61's notes and hide exactly the
+    # distinction the Verifier needs.
+    notes_per_chapter: dict[str, int] = {}
+    for n in notes:
+        chapter = n.get("chapter", "")
+        notes_per_chapter[chapter] = notes_per_chapter.get(chapter, 0) + 1
+
     listing = "\n".join(
         f"  {c['hs_code']}  {c['description']}" for c in candidates
     )
@@ -142,6 +152,8 @@ def rank_with_notes(item: LineItem, candidates: list[dict]) -> list[HSCandidate]
             confidence=r.confidence,
             reasoning=(f"[GIR {r.gir_rule}] " if r.gir_rule else "") + r.reasoning,
             evidence=r.evidence,
+            notes_available=notes_per_chapter.get(
+                by_code[r.hs_code]["chapter"], 0),
         ))
     return out
 
@@ -168,6 +180,7 @@ def classify(item: LineItem) -> list[HSCandidate]:
         heading_text=top["description"],
         confidence=0.25,
         reasoning="Retrieval only; the ranking stage returned no usable candidate.",
+        notes_available=len(_load_notes([top["chapter"]])),
     )]
 
 
@@ -221,13 +234,20 @@ class _NoteCache:
             grouped.setdefault(n.get("chapter", "??"), []).append(n)
         return grouped
 
-    def get_many(self, chapters: list[str]) -> list[dict]:
+    def _ensure(self) -> dict[str, list[dict]]:
         if self._by_chapter is None:
             self._by_chapter = self._load()
+        return self._by_chapter
+
+    def get_many(self, chapters: list[str]) -> list[dict]:
+        loaded = self._ensure()
         out: list[dict] = []
         for ch in chapters:
-            out.extend(self._by_chapter.get(ch, []))
+            out.extend(loaded.get(ch, []))
         return out
+
+    def chapters(self) -> list[str]:
+        return sorted(self._ensure())
 
 
 _note_cache = _NoteCache()
@@ -235,3 +255,14 @@ _note_cache = _NoteCache()
 
 def _notes_by_chapter() -> _NoteCache:
     return _note_cache
+
+
+def chapters_with_notes() -> list[str]:
+    """Chapters the knowledge base actually holds Section/Chapter Notes for.
+
+    The Verifier reports this when nothing could be cited, so the message
+    names a real coverage limit ("no note is loaded for Chapter 54")
+    instead of sounding like a retrieval failure. Read from the same cache
+    the classifier uses, so the two can never disagree.
+    """
+    return _note_cache.chapters()

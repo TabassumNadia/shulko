@@ -198,14 +198,15 @@ def regulatory_node(state: ShulkoState) -> dict:
         duty figures and simply carries no advisory for that code."""
         code, description = pair
         try:
-            return code, check_regulations(code, description)
+            result = check_regulations(code, description)
+            return code, [a.model_dump() for a in result.advisories], result.mechanism
         except Exception as exc:
             print(f"[regulatory] check failed for {code}: {exc}")
-            return code, []
+            return code, [], "none"
 
     pairs = list(unique.items())
     found = _parallel(check, pairs)
-    by_code = {code: [a.model_dump() for a in items] for code, items in found}
+    by_code = {code: items for code, items, _ in found}
 
     advisories = []
     for r in results:
@@ -213,7 +214,23 @@ def regulatory_node(state: ShulkoState) -> dict:
         r["advisories"] = by_code.get(code, [])
         advisories.extend(r["advisories"])
 
-    return {"advisories": advisories}
+    # Report the strongest engine that actually ran. "none" for every code
+    # means the grounding step produced nothing at all -- no key, or the
+    # quota is gone -- and an empty advisory list then means "not checked",
+    # not "nothing to declare". The report says which, because the two
+    # carry opposite advice for the importer.
+    ran = {mechanism for _, _, mechanism in found}
+    mechanism = next(
+        (m for m in ("google_search", "tavily") if m in ran), "none"
+    )
+    return {
+        "advisories": advisories,
+        "grounding": {
+            "mechanism": mechanism,
+            "available": mechanism != "none",
+            "codes_checked": len(pairs),
+        },
+    }
 
 
 @traceable(name="05_verify", run_type="chain")
@@ -271,6 +288,9 @@ def report_node(state: ShulkoState) -> dict:
         "effective_rate": round(totals["tti"] / totals["av"] * 100, 2) if totals["av"] else 0.0,
         "needs_review": state.get("needs_review", False),
         "advisories": state.get("advisories", []),
+        "grounding": state.get("grounding") or {
+            "mechanism": "none", "available": False, "codes_checked": 0,
+        },
     }}
 
 

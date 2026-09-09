@@ -13,6 +13,7 @@ dropped, not softened -- because an importer may act on it.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 
 from langsmith import traceable
 
@@ -45,13 +46,33 @@ def _split_claims(text: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if len(s.strip()) > 25]
 
 
+@dataclass
+class RegulatoryResult:
+    """Advisories, plus which engine actually produced them.
+
+    An empty advisory list used to mean two different things at once:
+    "the web was searched and holds no obligation for this code" and "no
+    search could be run at all". The first is a finding an importer can
+    rely on; the second is a hole in the answer. Carrying the mechanism
+    lets the caller say which happened rather than showing silence for
+    both.
+    """
+    advisories: list[Advisory] = field(default_factory=list)
+    mechanism: str = "none"          # google_search | tavily | none
+
+    @property
+    def searched(self) -> bool:
+        return self.mechanism != "none"
+
+
 @traceable(name="04_regulatory_check", run_type="chain")
-def check_regulations(hs_code: str, description: str) -> list[Advisory]:
+def check_regulations(hs_code: str, description: str) -> RegulatoryResult:
     """Search for live requirements affecting this code.
 
-    Returns an empty list when nothing relevant was retrieved. Empty is a
-    valid, useful answer -- it means no live obligation was found, not
-    that the agent failed.
+    An empty `advisories` list with `searched` true means the search ran
+    and found no live obligation -- a real answer. Empty with `searched`
+    false means the search never happened (no key, or quota exhausted),
+    which the caller must surface instead of presenting as "all clear".
     """
     answer = grounded_answer(
         REGULATORY_SYSTEM,
@@ -64,7 +85,7 @@ def check_regulations(hs_code: str, description: str) -> list[Advisory]:
     # No sources means nothing was actually retrieved. Whatever the model
     # wrote came from memory, so it does not ship.
     if not answer.is_grounded or not answer.text:
-        return []
+        return RegulatoryResult(mechanism=answer.mechanism)
 
     primary = answer.sources[0]["url"]
     advisories: list[Advisory] = []
@@ -79,4 +100,4 @@ def check_regulations(hs_code: str, description: str) -> list[Advisory]:
         advisories.append(Advisory(
             kind=_classify(claim), message=claim, source_url=url
         ))
-    return advisories
+    return RegulatoryResult(advisories=advisories, mechanism=answer.mechanism)

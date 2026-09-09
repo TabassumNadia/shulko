@@ -83,6 +83,14 @@ TEXT = {
         "offline": "Backend not reachable. Start it with: uvicorn backend.main:app --reload",
         "confidence": "confidence",
         "no_items": "No line items could be read from that document.",
+        "grounding_via": "Regulatory advisories above were retrieved live via {engine}.",
+        "grounding_clear": "Checked live via {engine}: no additional Bangladesh "
+                           "import restriction or certificate requirement was found "
+                           "for these codes.",
+        "grounding_off": "The live regulatory check could not run (no search key, "
+                         "or the daily API quota is exhausted), so this run carries "
+                         "no advisories. Absence here does not mean none apply — "
+                         "verify SRO and certificate requirements separately.",
     },
     "bn": {
         "rate_card": "এই heading-এর সরকারি হার",
@@ -127,6 +135,15 @@ TEXT = {
         "offline": "ব্যাকএন্ড চলছে না। চালু করুন: uvicorn backend.main:app --reload",
         "confidence": "নিশ্চয়তা",
         "no_items": "এই ডকুমেন্ট থেকে কোনো পণ্য পড়া যায়নি।",
+        "grounding_via": "উপরের নিয়মকানুন সংক্রান্ত তথ্য {engine} দিয়ে সরাসরি "
+                         "ইন্টারনেট থেকে আনা হয়েছে।",
+        "grounding_clear": "{engine} দিয়ে যাচাই করা হয়েছে — এই code-গুলোর জন্য "
+                           "অতিরিক্ত কোনো আমদানি নিষেধাজ্ঞা বা সার্টিফিকেটের "
+                           "প্রয়োজন পাওয়া যায়নি।",
+        "grounding_off": "সরাসরি নিয়মকানুন যাচাই করা যায়নি (search key নেই, "
+                         "অথবা দৈনিক API কোটা শেষ), তাই এই ফলাফলে কোনো সতর্কতা "
+                         "নেই। এর মানে কোনো নিয়ম নেই তা নয় — SRO আর সার্টিফিকেটের "
+                         "শর্ত আলাদাভাবে যাচাই করুন।",
     },
 }
 
@@ -146,6 +163,29 @@ def health() -> dict | None:
 
 def taka(value: float) -> str:
     return f"৳{value:,.2f}"
+
+
+def _render_grounding(report: dict, lang: str) -> None:
+    """Say whether the live regulatory search actually ran.
+
+    An empty advisory list is ambiguous on its own: it can mean the web
+    was searched and Bangladesh imposes no extra obligation on this code,
+    or that no search happened at all. Only the first is reassuring, so
+    the two must never render identically.
+    """
+    grounding = report.get("grounding") or {}
+    if not grounding.get("codes_checked"):
+        return
+
+    if not grounding.get("available"):
+        st.caption(t("grounding_off", lang))
+        return
+
+    engine = ("Google Search grounding"
+              if grounding.get("mechanism") == "google_search"
+              else "Tavily search (fallback)")
+    key = "grounding_via" if (report.get("advisories") or []) else "grounding_clear"
+    st.caption(t(key, lang).format(engine=engine))
 
 
 def render_report(report: dict, lang: str) -> None:
@@ -169,6 +209,7 @@ def render_report(report: dict, lang: str) -> None:
         st.caption(t("rate_note", lang))
         for result in items:
             _render_rate_card(result, lang)
+        _render_grounding(report, lang)
         return
 
     totals = report.get("totals") or {}
@@ -189,6 +230,8 @@ def render_report(report: dict, lang: str) -> None:
         st.markdown(f"**{t('advisories', lang)}**")
         for a in advisories:
             st.markdown(f"- {a['message']}  \n  [{a.get('kind', 'info')}]({a['source_url']})")
+
+    _render_grounding(report, lang)
 
     st.download_button(
         t("download", lang),
@@ -225,7 +268,7 @@ def _render_rate_card(result: dict, lang: str) -> None:
                     t("rate", lang): [f"{rates.get(k, 0)}%" for k in
                                       ("cd", "rd", "sd", "vat", "ait", "at")],
                 }),
-                hide_index=True, use_container_width=True,
+                hide_index=True, width="stretch",
             )
 
         for warning in result.get("warnings") or []:
@@ -272,7 +315,7 @@ def _render_item(result: dict, lang: str) -> None:
                     "BDT": [duty.get(k, 0) for k in
                             ("cd", "rd", "sd", "vat", "ait", "at", "tti")],
                 }),
-                hide_index=True, use_container_width=True,
+                hide_index=True, width="stretch",
             )
 
         for warning in result.get("warnings") or []:
@@ -358,10 +401,10 @@ with st.sidebar:
     if invoice is not None:
         note = st.text_input(t("note", lang), placeholder=t("note_ph", lang))
         analyze = st.button(t("analyze", lang), type="primary",
-                            use_container_width=True)
+                            width="stretch")
         st.caption(t("ready", lang))
 
-    if st.button(t("clear", lang), use_container_width=True):
+    if st.button(t("clear", lang), width="stretch"):
         st.session_state.messages = []
         st.session_state.handled = None
         st.rerun()

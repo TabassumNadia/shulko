@@ -27,12 +27,42 @@ UPLOAD_DIR = Path(tempfile.gettempdir()) / "shulko-uploads"
 ALLOWED = {".png", ".jpg", ".jpeg", ".webp", ".pdf"}
 
 
+def _log_effective_config() -> None:
+    """Print the models this process will actually use.
+
+    Settings are read once, at import, and `uvicorn --reload` watches
+    *.py only -- editing .env does not restart the server. So a process
+    can outlive the configuration that started it, and /health will keep
+    faithfully reporting the models this process loaded while .env on disk
+    says something else. Printing them at startup makes the effective
+    config checkable at a glance, and makes the fix obvious: restart.
+    """
+    settings = get_settings()
+    print(
+        "[shulko] models in effect -- "
+        f"chat={settings.chat_model} "
+        f"vision={settings.vision_model} "
+        f"judge={settings.judge_model} "
+        f"grounding={settings.grounding_model} "
+        f"embeddings={settings.embedding_provider}",
+        flush=True,
+    )
+    print(
+        f"[shulko] tracing={'on' if settings.tracing_enabled else 'off'} "
+        f"project={settings.tracing_project} -- "
+        "edit .env then RESTART for changes to apply "
+        "(uvicorn --reload does not watch .env)",
+        flush=True,
+    )
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Startup work. `on_event` is deprecated in current FastAPI, so the
     database and upload directory are prepared here instead."""
     init_db()
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    _log_effective_config()
     yield
 
 
@@ -63,6 +93,15 @@ def _index_sizes() -> dict:
         return {"tariff_lines": 0, "chapter_notes": 0}
 
 
+def _notes_chapters() -> list[str]:
+    """Chapters with Section/Chapter Notes loaded, from the live cache."""
+    try:
+        from backend.agents.classifier import chapters_with_notes
+        return chapters_with_notes()
+    except Exception:
+        return []
+
+
 @app.get("/health")
 def health() -> dict:
     """Startup check. Say plainly what is and is not configured, so a
@@ -90,6 +129,10 @@ def health() -> dict:
             "judge": settings.judge_model,
             "embedding": settings.embedding_model,
         },
+        # Which chapters the Chapter-Note knowledge base actually covers.
+        # An item outside this list can never carry a note citation, so the
+        # limit belongs in the open rather than looking like a retrieval bug.
+        "notes_chapters": _notes_chapters(),
         "retrieval_mode": retrieval_mode,
         "langsmith_tracing": settings.tracing_enabled,
         "langsmith_project": settings.tracing_project,

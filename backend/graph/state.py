@@ -21,6 +21,7 @@ class ShulkoState(TypedDict, total=False):
     line_items: list[dict]
     results: Annotated[list[dict], operator.add]
     advisories: list[dict]
+    grounding: dict          # which search engine actually ran, if any
     needs_review: bool
     notional: bool           # true when no invoice value was supplied
     warnings: Annotated[list[str], operator.add]
