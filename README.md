@@ -197,6 +197,26 @@ it is handled in three layers:
 Set `GEMINI_RPM` in `.env` to match your tier. On a paid key, raise it and
 the whole pipeline gets faster with no code change.
 
+### When the day's allowance runs out
+
+The free tier also caps **requests per day, per model** — a different limit
+from the per-minute one, reported through the same 429 and told apart only
+by its `quotaId`. Pacing cannot help with that one, so it is detected and
+fails immediately with a message naming the fix rather than retrying for a
+minute per attempt.
+
+Each model id carries its own daily allowance, which is what makes the
+model ids configuration rather than constants:
+
+```bash
+CHAT_MODEL=gemini-3.5-flash-lite      # when flash is spent for the day
+VISION_MODEL=gemini-3.5-flash-lite
+```
+
+`gemini-3.5-flash` gives noticeably better classification and is worth
+using when its quota is available; `-lite` keeps the system demonstrable
+when it is not. Daily quotas reset at midnight US Pacific.
+
 **Grounded search has a separate, smaller free-tier allowance** and is
 usually the first thing to run out. When it does, the run still completes
 and simply carries no advisories. Setting `TAVILY_API_KEY` (free, 1,000
@@ -313,6 +333,14 @@ LangGraph
 ├── 05_verify
 └── 06_report
 ```
+
+Example traces:
+
+| Run | What it shows |
+|---|---|
+| [Invoice, 3 line items](https://smith.langchain.com/o/8ec18fdb-3a4c-4cc1-a437-cc171bb3ae0c/projects/p/2684f60b-304a-409c-b6dd-42212c0d5c07/r/01a0868c-bcea-7d80-8582-f6c87113dc5c) | the full pipeline: OCR, three concurrent classifications, duty, verification |
+| [Typed duty question](https://smith.langchain.com/o/8ec18fdb-3a4c-4cc1-a437-cc171bb3ae0c/projects/p/2684f60b-304a-409c-b6dd-42212c0d5c07/r/01a08688-da77-7053-8d01-eac3a6c38e12) | the short path: route, retrieve, shortlist, rank, verify |
+| [Out of scope](https://smith.langchain.com/o/8ec18fdb-3a4c-4cc1-a437-cc171bb3ae0c/projects/p/2684f60b-304a-409c-b6dd-42212c0d5c07/r/01a0868a-3a08-7db2-adcf-16f71e5712ec) | the refusal path, decided without an LLM call |
 
 Tracing is configured in `backend/__init__.py`, so **any** entry point has it
 before it can start a run. That placement is deliberate: LangChain reads
