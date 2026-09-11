@@ -5,7 +5,7 @@ every taka traced back to a tariff heading and a customs note.
 
 ![Shulko report view](docs/screenshots/03_report.png)
 
-**🎥 Video walkthrough:** [YouTube — demo + codebase explanation](PASTE_YOUTUBE_LINK_HERE)
+**🎥 Video walkthrough:** [YouTube — demo + codebase explanation](https://youtu.be/K6IlqNLmrFQ)
 
 **📊 LangSmith traces** (public, no login needed — full detail in
 [LangSmith tracing](#langsmith-tracing)):
