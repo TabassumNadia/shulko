@@ -62,6 +62,20 @@ decision, return an empty evidence list rather than inventing a quote.
 - Give an honest confidence. If two headings are genuinely defensible, \
 neither deserves high confidence. A wrong code stated confidently costs \
 the importer money at the port.
+- Do not give high confidence merely because the material matches.
+- The selected heading must fit the product's material, physical form,
+  function, and distinguishing features.
+- Treat distinguishing features as classification-critical when they
+  affect the scope of a heading.
+- If a distinguishing feature conflicts with the wording or scope of
+  a candidate heading, substantially reduce that candidate's confidence.
+- Do not use GIR 3(a) merely because one description sounds more specific.
+  First establish that the heading actually describes the goods.
+- If the available information cannot reliably distinguish between
+  candidates, keep confidence below the high-confidence range and
+  require human review.
+- confidence is a DECIMAL between 0.0 and 1.0 (e.g. 0.72 for "72% sure"). \
+Never return a whole number like 72 or 85.
 
 Return your top 3 candidates, best first."""
 

@@ -29,7 +29,7 @@ def _items(*descriptions):
 def test_one_failing_item_does_not_lose_the_others(monkeypatch):
     """The classifier blows up on the second item only."""
 
-    def flaky_classify(item):
+    def flaky_classify(item, language="en"):
         if "explodes" in item.description:
             raise RuntimeError("429 RESOURCE_EXHAUSTED")
         return []
@@ -57,7 +57,7 @@ def test_a_failed_item_is_flagged_rather_than_silently_dropped(monkeypatch):
 
     monkeypatch.setattr(
         "backend.agents.classifier.classify",
-        lambda item: (_ for _ in ()).throw(RuntimeError("boom")),
+        lambda item, language="en": (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
     state = {"line_items": _items("anything"), "importer_type": "commercial"}
@@ -73,7 +73,7 @@ def test_regulatory_failure_leaves_the_duty_figures_intact(monkeypatch):
 
     monkeypatch.setattr(
         "backend.agents.regulatory.check_regulations",
-        lambda code, description: (_ for _ in ()).throw(RuntimeError("429")),
+        lambda code, description, language="en": (_ for _ in ()).throw(RuntimeError("429")),
     )
 
     results = [{"item": {"description": "polypropylene granules"},
@@ -91,7 +91,7 @@ def test_verifier_failure_flags_for_review_rather_than_passing(monkeypatch):
 
     monkeypatch.setattr(
         "backend.agents.verifier.verify",
-        lambda description, candidates: (_ for _ in ()).throw(RuntimeError("429")),
+        lambda description, candidates, language="en": (_ for _ in ()).throw(RuntimeError("429")),
     )
 
     results = [{"item": {"description": "widget"}, "candidates": []}]

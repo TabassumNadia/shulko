@@ -18,6 +18,7 @@ from langsmith import traceable
 from pydantic import BaseModel, Field
 
 from backend.core.config import get_settings
+from backend.core.i18n import language_directive, tr
 from backend.core.llm import structured
 from backend.core.schemas import HSCandidate
 from backend.prompts.verify import VERIFY_SYSTEM, VERIFY_USER
@@ -33,13 +34,14 @@ class Verdict(BaseModel):
 
 
 @traceable(name="05_verify_classification", run_type="chain")
-def verify(description: str, candidates: list[HSCandidate]) -> Verdict:
+def verify(
+    description: str, candidates: list[HSCandidate], language: str = "en"
+) -> Verdict:
     """Adversarially review the chosen classification."""
     if not candidates:
         return Verdict(
             verdict="fail", code_matches=False, needs_review=True,
-            warnings=["No tariff heading could be matched to this item. "
-                      "It may fall outside the loaded schedule."],
+            warnings=[tr("no_heading_could_be_matched", language)],
         )
 
     chosen = candidates[0]
@@ -49,11 +51,11 @@ def verify(description: str, candidates: list[HSCandidate]) -> Verdict:
     if chosen.confidence < threshold:
         return Verdict(
             verdict="fail", confidence_justified=False, needs_review=True,
-            warnings=[
-                f"Confidence {chosen.confidence:.0%} is below the "
-                f"{threshold:.0%} threshold. A broker should confirm "
-                f"{chosen.hs_code} before this is filed."
-            ],
+            warnings=[tr(
+                "confidence_below_threshold", language,
+                confidence=f"{chosen.confidence:.0%}",
+                threshold=f"{threshold:.0%}", hs_code=chosen.hs_code,
+            )],
         )
 
     evidence_text = "\n".join(
@@ -66,7 +68,7 @@ def verify(description: str, candidates: list[HSCandidate]) -> Verdict:
 
     try:
         result = structured("judge", Verdict).invoke([
-            ("system", VERIFY_SYSTEM),
+            ("system", VERIFY_SYSTEM + language_directive(language)),
             ("user", VERIFY_USER.format(
                 description=description,
                 hs_code=chosen.hs_code,
@@ -81,20 +83,19 @@ def verify(description: str, candidates: list[HSCandidate]) -> Verdict:
         # If the judge itself fails, flag rather than pass silently.
         return Verdict(
             verdict="fail", needs_review=True,
-            warnings=[f"Verification could not be completed ({exc}). "
-                      "Treat this classification as unconfirmed."],
+            warnings=[tr("verification_failed", language, error=exc)],
         )
 
     # A close runner-up is a genuine ambiguity even when the judge is happy.
     if len(candidates) > 1 and (chosen.confidence - candidates[1].confidence) < 0.10:
         result.needs_review = True
-        result.warnings.append(
-            f"{candidates[1].hs_code} scores almost as well as "
-            f"{chosen.hs_code}. Both are defensible; the choice changes the duty."
-        )
+        result.warnings.append(tr(
+            "close_runner_up", language,
+            other_code=candidates[1].hs_code, hs_code=chosen.hs_code,
+        ))
 
     if not chosen.evidence:
-        result.warnings.append(_absence_warning(chosen))
+        result.warnings.append(_absence_warning(chosen, language))
         if chosen.notes_available:
             # The governing notes WERE in front of the model and it
             # answered without quoting any of them. That is a gap in the
@@ -132,7 +133,7 @@ def _absence_reason(candidate: HSCandidate) -> str:
     )
 
 
-def _absence_warning(candidate: HSCandidate) -> str:
+def _absence_warning(candidate: HSCandidate, language: str = "en") -> str:
     """The same distinction, phrased for the importer.
 
     Two different facts used to share one sentence. "No chapter note was
@@ -143,10 +144,10 @@ def _absence_warning(candidate: HSCandidate) -> str:
     """
     chapter = _chapter_of(candidate)
     if candidate.notes_available:
-        return (
-            f"{candidate.notes_available} Section/Chapter Note(s) for Chapter "
-            f"{chapter} were available to the classifier but none was cited, "
-            f"so {candidate.hs_code} rests on description matching alone."
+        return tr(
+            "notes_available_not_cited", language,
+            notes_available=candidate.notes_available, chapter=chapter,
+            hs_code=candidate.hs_code,
         )
 
     try:
@@ -154,10 +155,9 @@ def _absence_warning(candidate: HSCandidate) -> str:
         covered = ", ".join(chapters_with_notes())
     except Exception:
         covered = ""
-    coverage = (f" Notes are currently loaded for chapters {covered}."
-                if covered else "")
-    return (
-        f"No Section or Chapter Note for Chapter {chapter} is loaded in the "
-        f"knowledge base, so there was none to cite; {candidate.hs_code} rests "
-        f"on the heading description.{coverage}"
+
+    return tr(
+        "no_note_loaded_for_chapter", language,
+        chapter=chapter, hs_code=candidate.hs_code,
+        coverage=tr("notes_coverage_suffix", language, covered=covered) if covered else "",
     )

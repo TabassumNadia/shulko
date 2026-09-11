@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 from langsmith import traceable
 
+from backend.core.i18n import language_directive
 from backend.core.schemas import Advisory
 from backend.prompts.regulatory import REGULATORY_SYSTEM, REGULATORY_USER
 from backend.tools.grounded_search import grounded_answer
@@ -25,8 +26,11 @@ MAX_ADVISORIES = 4
 
 KINDS = [
     ("sro", re.compile(r"\bSRO\b|statutory regulatory order|প্রজ্ঞাপন", re.I)),
-    ("restriction", re.compile(r"\b(ban|banned|prohibit|restrict)", re.I)),
-    ("certificate", re.compile(r"certificat|BSTI|radiation|phytosanitary|BTRC|permit|licen[cs]e", re.I)),
+    ("restriction", re.compile(
+        r"\b(ban|banned|prohibit|restrict)|নিষিদ্ধ|নিষেধাজ্ঞা", re.I)),
+    ("certificate", re.compile(
+        r"certificat|BSTI|radiation|phytosanitary|BTRC|permit|licen[cs]e|"
+        r"সার্টিফিকেট|অনুমোদন|লাইসেন্স", re.I)),
 ]
 
 
@@ -43,7 +47,10 @@ def _split_claims(text: str) -> list[str]:
     bullets = [l for l in lines if len(l) > 25]
     if len(bullets) > 1:
         return bullets
-    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if len(s.strip()) > 25]
+    # "।" is the Bangla sentence-ending punctuation (dari) — a Bangla
+    # advisory that only ends sentences with it, and never with . ! ?,
+    # would otherwise come back as one unsplit paragraph.
+    return [s.strip() for s in re.split(r"(?<=[.!?।])\s+", text) if len(s.strip()) > 25]
 
 
 @dataclass
@@ -66,7 +73,9 @@ class RegulatoryResult:
 
 
 @traceable(name="04_regulatory_check", run_type="chain")
-def check_regulations(hs_code: str, description: str) -> RegulatoryResult:
+def check_regulations(
+    hs_code: str, description: str, language: str = "en"
+) -> RegulatoryResult:
     """Search for live requirements affecting this code.
 
     An empty `advisories` list with `searched` true means the search ran
@@ -75,7 +84,7 @@ def check_regulations(hs_code: str, description: str) -> RegulatoryResult:
     which the caller must surface instead of presenting as "all clear".
     """
     answer = grounded_answer(
-        REGULATORY_SYSTEM,
+        REGULATORY_SYSTEM + language_directive(language),
         REGULATORY_USER.format(hs_code=hs_code, description=description),
         # A literal search engine needs a search string, not a prompt.
         query=f"Bangladesh import {description} HS {hs_code} "

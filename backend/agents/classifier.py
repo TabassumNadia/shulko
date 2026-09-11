@@ -24,8 +24,9 @@ it tells the user where the system is unsure.
 from __future__ import annotations
 
 from langsmith import traceable
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from backend.core.i18n import language_directive, tr
 from backend.core.llm import structured
 from backend.core.schemas import Evidence, HSCandidate, LineItem
 from backend.prompts.classify import (
@@ -49,6 +50,27 @@ class RankedCandidate(BaseModel):
     reasoning: str
     gir_rule: str = Field(default="", description="GIR rule applied, e.g. '3(a)'")
     evidence: list[Evidence] = Field(default_factory=list)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _normalize_confidence(cls, v):
+        """Coerce, don't reject, an out-of-range confidence.
+
+        The model is asked for a 0.0-1.0 decimal, but occasionally
+        answers on a 0-100 scale instead (e.g. 85 meaning "85%"). A
+        strict bounds check would raise here and the caller would treat
+        the whole item as unclassifiable over a formatting slip, not an
+        actual classification problem. Normalizing is the safer failure
+        mode: a percent-shaped number is rescaled, anything still out of
+        range is clamped rather than discarded.
+        """
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return v
+        if v > 1.0:
+            v = v / 100.0
+        return max(0.0, min(1.0, v))
 
 
 class Ranking(BaseModel):
@@ -101,7 +123,9 @@ def shortlist(item: LineItem, candidates: list[dict]) -> list[dict]:
 
 
 @traceable(name="02c_rank_with_chapter_notes", run_type="chain")
-def rank_with_notes(item: LineItem, candidates: list[dict]) -> list[HSCandidate]:
+def rank_with_notes(
+    item: LineItem, candidates: list[dict], language: str = "en"
+) -> list[HSCandidate]:
     """Stage 3 — re-rank against the Section and Chapter Notes.
 
     This is the stage that can demote a heading. Everything before it is
@@ -130,7 +154,7 @@ def rank_with_notes(item: LineItem, candidates: list[dict]) -> list[HSCandidate]
     a = item.attributes
     model = structured("reasoning", Ranking)
     ranked = model.invoke([
-        ("system", RANK_SYSTEM),
+        ("system", RANK_SYSTEM + language_directive(language)),
         ("user", RANK_USER.format(
             description=item.description,
             material=a.material or "unknown",
@@ -159,14 +183,14 @@ def rank_with_notes(item: LineItem, candidates: list[dict]) -> list[HSCandidate]
 
 
 @traceable(name="02_classify_hs_code", run_type="chain")
-def classify(item: LineItem) -> list[HSCandidate]:
+def classify(item: LineItem, language: str = "en") -> list[HSCandidate]:
     """Run all three stages. Returns up to 3 candidates, best first."""
     candidates = retrieve(item)
     if not candidates:
         return []
 
     short = shortlist(item, candidates)
-    ranked = rank_with_notes(item, short)
+    ranked = rank_with_notes(item, short, language)
 
     if ranked:
         return ranked
@@ -179,7 +203,7 @@ def classify(item: LineItem) -> list[HSCandidate]:
         hs_code=top["hs_code"],
         heading_text=top["description"],
         confidence=0.25,
-        reasoning="Retrieval only; the ranking stage returned no usable candidate.",
+        reasoning=tr("retrieval_only_fallback", language),
         notes_available=len(_load_notes([top["chapter"]])),
     )]
 

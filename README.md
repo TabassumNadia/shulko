@@ -5,6 +5,8 @@ every taka traced back to a tariff heading and a customs note.
 
 ![Shulko report view](docs/screenshots/03_report.png)
 
+**🎥 Video walkthrough:** [YouTube — demo + codebase explanation](PASTE_YOUTUBE_LINK_HERE)
+
 ---
 
 ## The problem
@@ -50,6 +52,19 @@ The arithmetic is not. So the model never does it — see below.
                  ┌─ invoice ──→ Extract ─┐
 User input ─→ Route ─ duty question ─────┼─→ Classify ─→ Duty ─→ Regulatory ─→ Verify ─→ Report
                  └─ out of scope ────────────────────────────────────────────────────────┘
+```
+
+```mermaid
+flowchart LR
+    U[User input] --> R{Route}
+    R -- invoice --> X[Extract<br/>OCR]
+    R -- duty question --> C
+    R -- out of scope --> D[Refusal<br/>no LLM call]
+    X --> C[Classify<br/>HS code, top 3]
+    C --> DU[Duty<br/>plain Python]
+    DU --> RG[Regulatory<br/>Google Search grounding]
+    RG --> V[Verify<br/>judge model]
+    V --> RP[Report]
 ```
 
 | Stage | What it does | What it is |
@@ -381,13 +396,14 @@ LangGraph
 └── 06_report
 ```
 
-Example traces:
+Example traces, captured on the final code (public share links — no
+LangSmith login needed to open them):
 
 | Run | What it shows |
 |---|---|
-| [Invoice, 3 line items](https://smith.langchain.com/o/8ec18fdb-3a4c-4cc1-a437-cc171bb3ae0c/projects/p/2684f60b-304a-409c-b6dd-42212c0d5c07/r/01a0868c-bcea-7d80-8582-f6c87113dc5c) | the full pipeline: OCR, three concurrent classifications, duty, verification |
-| [Typed duty question](https://smith.langchain.com/o/8ec18fdb-3a4c-4cc1-a437-cc171bb3ae0c/projects/p/2684f60b-304a-409c-b6dd-42212c0d5c07/r/01a08688-da77-7053-8d01-eac3a6c38e12) | the short path: route, retrieve, shortlist, rank, verify |
-| [Out of scope](https://smith.langchain.com/o/8ec18fdb-3a4c-4cc1-a437-cc171bb3ae0c/projects/p/2684f60b-304a-409c-b6dd-42212c0d5c07/r/01a0868a-3a08-7db2-adcf-16f71e5712ec) | the refusal path, decided without an LLM call |
+| [Invoice, 3 line items](https://smith.langchain.com/public/1dcc6e83-bbe6-4097-b7a1-b7b319c1468f/r/01a0900f-28eb-7c50-9c4a-036624e505c0) | the full pipeline: OCR, three concurrent classifications, duty, verification — every component reconciles to the taka |
+| [Invoice, 3 line items (second run)](https://smith.langchain.com/public/4affb870-3054-4c65-a708-4b3846f4c0f1/r/01a09018-5625-7a03-ad3c-99f36649ef9a) | the same pipeline on a different invoice |
+| [Typed duty question](https://smith.langchain.com/public/7eb6f6c8-f48f-4f34-a0a4-da706afb8f8f/r/01a0901b-ab0e-7902-8fb8-b2561fd241e8) | the short path: route → classify → duty, no OCR; reasoning is returned in Bangla per the request's `language` field |
 
 Tracing is configured in `backend/__init__.py`, so **any** entry point has it
 before it can start a run. That placement is deliberate: LangChain reads

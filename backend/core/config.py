@@ -62,6 +62,15 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./shulko.db"
     chroma_dir: str = "./data/chroma"
 
+    # --- auth ---
+    # Signs session tokens. The dev fallback below lets the app run out
+    # of the box for a student demo, but it is the SAME string in every
+    # clone of this repo, so anyone who read this file could forge a
+    # token for it -- set a real JWT_SECRET_KEY in .env before deploying
+    # anywhere another person can reach. A quick one: `openssl rand -hex 32`.
+    jwt_secret_key: str = "dev-only-insecure-secret-change-in-.env"
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
+
     # --- behaviour ---
     default_language: str = "en"           # "en" or "bn"
     confidence_threshold: float = 0.65     # below this -> needs_review
