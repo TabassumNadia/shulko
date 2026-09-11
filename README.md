@@ -7,6 +7,12 @@ every taka traced back to a tariff heading and a customs note.
 
 **🎥 Video walkthrough:** [YouTube — demo + codebase explanation](PASTE_YOUTUBE_LINK_HERE)
 
+**📊 LangSmith traces** (public, no login needed — full detail in
+[LangSmith tracing](#langsmith-tracing)):
+[Invoice run](https://smith.langchain.com/public/1dcc6e83-bbe6-4097-b7a1-b7b319c1468f/r/01a0900f-28eb-7c50-9c4a-036624e505c0) ·
+[Invoice run (second example)](https://smith.langchain.com/public/4affb870-3054-4c65-a708-4b3846f4c0f1/r/01a09018-5625-7a03-ad3c-99f36649ef9a) ·
+[Typed duty question](https://smith.langchain.com/public/7eb6f6c8-f48f-4f34-a0a4-da706afb8f8f/r/01a0901b-ab0e-7902-8fb8-b2561fd241e8)
+
 ---
 
 ## The problem
@@ -434,7 +440,6 @@ a named constant rather than a magic number in a formula:
 | Paper | What it contributed |
 |---|---|
 | arXiv 2605.14857 — *A Deterministic Agentic Workflow for HS Tariff Classification* | The fixed multi-stage classifier; top-3 output because 65% of errors are ranking, not retrieval |
-| ACL 2026 — *HSGraphAgent* | Hierarchical Select/Redirect traversal instead of flat retrieval |
 | arXiv 2605.06635 — *Cited but Not Verified* | The Verifier agent; citation accuracy is only 39–77% without one, and searching deeper made it worse |
 | arXiv 2603.07379 — *SoK: Agentic RAG* | Why the graph is deterministic rather than a free-roaming ReAct agent |
 | arXiv 2606.16987 — *Consensus-based Agentic LLM for HTS* | Confidence scores and human-in-the-loop review in the UI |
